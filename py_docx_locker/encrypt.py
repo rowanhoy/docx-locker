@@ -23,7 +23,7 @@ class DocxEncrypt:
         self.providerType = provider_type
 
 
-# Constants used in the legacy hash computation
+# Constants used in the hash computation
 InitialCodeArray = [
     0xE1F0, 0x1D0F, 0xCC9C, 0x84C0, 0x110C,
     0x0E10, 0xF1CE, 0x313E, 0x1872, 0xE139,
