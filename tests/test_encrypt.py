@@ -1,9 +1,9 @@
 import pytest
-from py_docx_locker.encrypt import generate_docx_protection
+from docx_locker.encrypt import generate_docx_protection
 
 
 @pytest.fixture
-def known_good_case():
+def known_good_encrypt_params():
     return {
         'password': 'password',
         'salt': 'ouz9XiaimAE4pO6OOtk28g==',
@@ -15,14 +15,14 @@ def known_good_case():
     }
 
 
-def test_generate_docx_protection_with_known_values(known_good_case):
-    case = generate_docx_protection(known_good_case['password'], known_good_case['salt'])
-    assert case.key_hash == known_good_case['expected_key_hash'], "Key hash does not match expected value"
-    assert case.salt_hash == known_good_case['salt'], "Salt hash does not match expected value"
-    assert case.spin_count == known_good_case['spin_count'], "Spin count does not match expected value"
-    assert case.algo_class == known_good_case['algo_class'], "Algorithm class does not match expected value"
-    assert case.algo_sid == known_good_case['algo_sid'], "Algorithm SID does not match expected value"
-    assert case.providerType == known_good_case['provider_type'], "Provider type does not match expected value"
+def test_generate_docx_protection_with_known_values(known_good_encrypt_params):
+    case = generate_docx_protection(known_good_encrypt_params['password'], known_good_encrypt_params['salt'])
+    assert case.key_hash == known_good_encrypt_params['expected_key_hash'], "Key hash does not match expected value"
+    assert case.salt_hash == known_good_encrypt_params['salt'], "Salt hash does not match expected value"
+    assert case.spin_count == known_good_encrypt_params['spin_count'], "Spin count does not match expected value"
+    assert case.algo_class == known_good_encrypt_params['algo_class'], "Algorithm class does not match expected value"
+    assert case.algo_sid == known_good_encrypt_params['algo_sid'], "Algorithm SID does not match expected value"
+    assert case.provider_type == known_good_encrypt_params['provider_type'], "Provider type does not match expected value"
 
 
 @pytest.mark.parametrize(
@@ -40,7 +40,7 @@ def test_generate_docx_protection_with_custom_spins(password, spins, expected_sp
     assert len(case.salt_hash) == 24, "Salt hash length is not 24 characters"
     assert case.algo_class == 'hash', "Algorithm class is not 'hash'"
     assert case.algo_sid == 14, "Algorithm SID is not 14"
-    assert case.providerType == 'rsaAES', "Provider type is not 'rsaAES'"
+    assert case.provider_type == 'rsaAES', "Provider type is not 'rsaAES'"
 
 
 @pytest.mark.parametrize(

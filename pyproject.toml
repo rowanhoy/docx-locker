@@ -1,7 +1,14 @@
 [project]
-name = "py-docx-locker"
+name = "docx-locker"
 version = "0.1.0"
 description = "Python module for enabling document protection on docx files"
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "lxml>=5.3.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.3",
+]

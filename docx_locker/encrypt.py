@@ -20,7 +20,7 @@ class DocxEncrypt:
         self.algo_sid = algo_sid
         self.algo_type = algo_type
         self.algo_class = algo_class
-        self.providerType = provider_type
+        self.provider_type = provider_type
 
 
 # Constants used in the hash computation
