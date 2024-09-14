@@ -1,2 +1,2 @@
-# py-docx-locker
+# docx-locker
 Python module for enabling document protection on docx files.
