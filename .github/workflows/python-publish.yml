@@ -2,8 +2,10 @@ name: Python build and publish
 
 on:
   push:
-    # branches:
-    #     - main
+    branches:
+      - main
+    tags:
+      - 'v*' 
 
 jobs:
   build:
@@ -20,15 +22,6 @@ jobs:
     
     - name: Install the project
       run: uv sync --all-extras --dev
-    
-    - name: Configure git
-      run: |
-        git config user.name "GitHub Action"
-        git config user.email "action@github.com"
-
-    - name: Bump version and tag
-      run: |
-        uv run bump2version patch --allow-dirty
 
     - name: Build the package
       run: |
