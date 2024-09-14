@@ -10,6 +10,8 @@ dependencies = [
 
 [tool.uv]
 dev-dependencies = [
+    "build>=1.2.2",
+    "bump2version>=1.0.1",
     "flake8>=7.1.1",
     "pytest>=8.3.3",
 ]
