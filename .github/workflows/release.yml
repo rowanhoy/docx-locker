@@ -22,7 +22,7 @@ jobs:
       run: uv sync --all-extras --dev --python "3.11"
 
     - name: Run tests
-      run: uv run --python "3.11" pytest --cov
+      run: uv run --python "3.11" pytest --cov --cov-report=xml
     
     - uses: codecov/codecov-action@v4
       with:

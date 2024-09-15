@@ -1,10 +1,10 @@
-[![image](https://img.shields.io/pypi/v/docx-locker.svg)](https://pypi.org/project/docx-locker/)
-[![image](https://img.shields.io/pypi/l/docx-locker.svg)](https://github.com/rowanhoy/docx-locker/blob/main/LICENSE)
-[![image](https://img.shields.io/pypi/pyversions/docx-locker.svg)](https://pypi.org/project/docx-locker/)
+[![image](https://img.shields.io/pypi/v/docx-locker)](https://pypi.org/project/docx-locker/)
+[![image](https://img.shields.io/pypi/l/docx-locker)](https://github.com/rowanhoy/docx-locker/blob/main/LICENSE)
+[![image](https://img.shields.io/pypi/pyversions/docx-locker)](https://pypi.org/project/docx-locker/)
 [![CodeQL](https://github.com/rowanhoy/docx-locker/actions/workflows/codeql.yml/badge.svg?branch=main&event=push)](https://github.com/rowanhoy/docx-locker/actions/workflows/codeql.yml)
 [![codecov](https://codecov.io/github/rowanhoy/docx-locker/graph/badge.svg?token=FW6CBDRBV4)](https://codecov.io/github/rowanhoy/docx-locker)
-[![GitHub Actions](https://github.com/rowanhoy/docx-locker/workflows/release/badge.svg)](https://github.com/rowanhoy/docx-locker/actions)
-[![GitHub Actions](https://github.com/rowanhoy/docx-locker/workflows/tests/badge.svg)](https://github.com/rowanhoy/docx-locker/actions)
+[![GitHub Actions](https://github.com/rowanhoy/docx-locker/workflows/Release/badge.svg)](https://github.com/rowanhoy/docx-locker/actions)
+[![GitHub Actions](https://github.com/rowanhoy/docx-locker/workflows/Tests/badge.svg)](https://github.com/rowanhoy/docx-locker/actions)
 
 
 # docx-locker
