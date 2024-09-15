@@ -1,6 +1,6 @@
 [project]
 name = "docx-locker"
-version = "0.3.0"
+version = "0.4.0"
 description = "Python module for enabling document protection on docx files"
 readme = "README.md"
 requires-python = ">=3.9"
