@@ -1,13 +1,10 @@
-name: website
+name: Pages
 
 # build the documentation whenever there are new commits on main
 on:
   push:
-    branches:
-      - main
-    # Alternative: only build for tags.
-    # tags:
-    #   - '*'
+    tags:
+      - 'v*' 
 
 # security: restrict permissions for CI jobs.
 permissions:
@@ -31,7 +28,7 @@ jobs:
     # ADJUST THIS: build your documentation into docs/.
     # We use a custom build script for pdoc itself, ideally you just run `pdoc -o docs/ ...` here.
     - name: Generate docs
-      run: uv run pdoc -o docs docx_locker --python "3.11"
+      run: uv run --python "3.11" pdoc -o docs docx_locker 
 
     - uses: actions/upload-pages-artifact@v3
       with:
