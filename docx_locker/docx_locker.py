@@ -5,9 +5,54 @@ from typing import Literal
 from lxml import etree
 from lxml.etree import QName
 from .encrypt import generate_docx_protection
+from typing import Optional
 
 
-def get_docx_protection(doc_path: str) -> dict:
+class DocxProtectionParams:
+    def __init__(
+        self,
+        edit_option: str = None,
+        enforce_option: str = None,
+        crypt_provider_type: str = "rsaAES",
+        crypt_algorithm_class: str = "hash",
+        crypt_algorithm_type: str = "typeAny",
+        crypt_algorithm_sid: int = 14,
+        crypt_spin_count: int = 10000,
+        hash_value: str = None,
+        salt_value: str = None
+    ):
+        """
+        Initializes the DocxProtectionParams class with the provided protection settings.
+        """
+        self.edit_option = edit_option
+        """Specifies the type of editing allowed, such as 'readOnly' or 'trackedChanges' (w:edit)."""
+
+        self.enforce_option = enforce_option
+        """Enforce document protection settings (w:Enforcement)."""
+
+        self.crypt_provider_type = crypt_provider_type
+        """Specifies the cryptographic provider type (w:cryptProviderType)."""
+
+        self.crypt_algorithm_class = crypt_algorithm_class
+        """Represents the cryptographic algorithm class (w:cryptAlgorithmClass)."""
+
+        self.crypt_algorithm_type = crypt_algorithm_type
+        """Represents the cryptographic algorithm type (w:cryptAlgorithmType)."""
+
+        self.crypt_algorithm_sid = crypt_algorithm_sid
+        """Represents the cryptographic hashing algorithm SID (w:cryptAlgorithmSid)."""
+
+        self.crypt_spin_count = crypt_spin_count
+        """Iterations to run the hashing algorithm (w:cryptSpinCount)."""
+
+        self.hash_value = hash_value
+        """Represents the password hash value (w:hashValue)."""
+
+        self.salt_value = salt_value
+        """Represents the salt value used for the password verifier (w:saltValue)."""
+
+
+def get_docx_protection(doc_path: str) -> DocxProtectionParams:
     # Ensure the file exists
     doc_file = Path(doc_path)
     if not doc_file.exists():
@@ -28,19 +73,19 @@ def get_docx_protection(doc_path: str) -> dict:
         # Find the documentProtection element
         document_protection = tree.find('.//w:documentProtection', namespaces)
         if document_protection is not None:
-            # Extract the protection settings using .get() to directly fetch attribute values
-            protection_settings = {
-                'edit_option': document_protection.get(f'{{{namespaces["w"]}}}edit'),  # Fetch the 'edit' attribute
-                'enforce_option': document_protection.get(f'{{{namespaces["w"]}}}enforcement'),
-                'cryptProviderType': document_protection.get(f'{{{namespaces["w"]}}}cryptProviderType'),
-                'cryptAlgorithmClass': document_protection.get(f'{{{namespaces["w"]}}}cryptAlgorithmClass'),
-                'cryptAlgorithmType': document_protection.get(f'{{{namespaces["w"]}}}cryptAlgorithmType'),
-                'cryptAlgorithmSid': document_protection.get(f'{{{namespaces["w"]}}}cryptAlgorithmSid'),
-                'cryptSpinCount': document_protection.get(f'{{{namespaces["w"]}}}cryptSpinCount'),
-                'hash': document_protection.get(f'{{{namespaces["w"]}}}hash'),
-                'salt': document_protection.get(f'{{{namespaces["w"]}}}salt')
-            }
-            return protection_settings
+            # Create an instance of DocxProtectionParams with the attributes extracted from the document
+            protection_params = DocxProtectionParams(
+                edit_option=document_protection.get(f'{{{namespaces["w"]}}}edit'),
+                enforce_option=document_protection.get(f'{{{namespaces["w"]}}}enforcement'),
+                crypt_provider_type=document_protection.get(f'{{{namespaces["w"]}}}cryptProviderType'),
+                crypt_algorithm_class=document_protection.get(f'{{{namespaces["w"]}}}cryptAlgorithmClass'),
+                crypt_algorithm_type=document_protection.get(f'{{{namespaces["w"]}}}cryptAlgorithmType'),
+                crypt_algorithm_sid=int(document_protection.get(f'{{{namespaces["w"]}}}cryptAlgorithmSid', 14)),
+                crypt_spin_count=int(document_protection.get(f'{{{namespaces["w"]}}}cryptSpinCount', 10000)),
+                hash_value=document_protection.get(f'{{{namespaces["w"]}}}hash'),
+                salt_value=document_protection.get(f'{{{namespaces["w"]}}}salt')
+            )
+            return protection_params
     return None
 
 
@@ -49,8 +94,9 @@ def apply_docx_protection(
     password: str,
     salt: str = None,
     edit_option: Literal["forms", "none", "readOnly", "trackedChanges", "comments"] = "trackedChanges",
-    enforce_option: Literal[0, 1] = 1
-) -> None:
+    enforce_option: Literal[0, 1] = 1,
+    return_protection_params: bool = False
+) -> Optional[DocxProtectionParams]:
     # Ensure the file exists
     doc_file = Path(doc_path)
     if not doc_file.exists():
@@ -139,3 +185,16 @@ def apply_docx_protection(
     # Write the in-memory ZIP buffer back to the original file
     with open(doc_file, 'wb') as f:
         f.write(in_memory_zip.getvalue())
+
+    if return_protection_params:
+        return DocxProtectionParams(
+            edit_option=edit_option,
+            enforce_option=str(enforce_option),
+            crypt_provider_type=crypto_params.provider_type,
+            crypt_algorithm_class=crypto_params.algo_class,
+            crypt_algorithm_type=crypto_params.algo_type,
+            crypt_algorithm_sid=crypto_params.algo_sid,
+            crypt_spin_count=crypto_params.spin_count,
+            hash_value=crypto_params.key_hash,
+            salt_value=crypto_params.salt_hash
+        )
