@@ -1,11 +1,12 @@
 from zipfile import ZipFile, ZIP_DEFLATED
 from io import BytesIO
 from pathlib import Path
-from typing import Literal, Union
+from typing import Literal, Optional, Union
 from lxml import etree
 from lxml.etree import QName
 from .encrypt import generate_docx_protection
-from typing import Optional
+
+_VALID_EDIT_OPTIONS = frozenset({"forms", "none", "readOnly", "trackedChanges", "comments"})
 
 
 class DocxProtectionParams:
@@ -98,27 +99,34 @@ def _apply_docx_protection_internal(
 ) -> tuple[BytesIO, DocxProtectionParams]:
     """
     Internal function that contains the core logic for applying protection to a DOCX file.
-    
+
     Args:
         input_zip: An open ZipFile object containing the DOCX contents
         password: The password to use for protection
         salt: Optional salt value for encryption
         edit_option: The type of editing allowed
         enforce_option: Whether to enforce protection
-    
+
     Returns:
         Tuple of (protected_document_buffer, protection_params)
     """
+    if not isinstance(password, str):
+        raise TypeError(f"password must be a str, not {type(password).__name__}")
+    if edit_option not in _VALID_EDIT_OPTIONS:
+        raise ValueError(
+            f"Invalid edit_option '{edit_option}'. "
+            f"Must be one of: {', '.join(sorted(_VALID_EDIT_OPTIONS))}"
+        )
     # Validate that settings.xml exists
     if 'word/settings.xml' not in input_zip.namelist():
         raise ValueError("The DOCX file does not contain word/settings.xml and cannot be protected")
-    
+
     # Generate the encryption vars
     crypto_params = generate_docx_protection(password, salt)
 
     # Unzip the file in memory
     in_memory_zip = BytesIO()
-    
+
     # Copy all files except the one we're going to modify
     with ZipFile(in_memory_zip, 'w', ZIP_DEFLATED) as temp_docx:
         for item in input_zip.infolist():
@@ -192,7 +200,7 @@ def _apply_docx_protection_internal(
 
                 # Write the modified settings.xml back into the archive
                 temp_docx.writestr('word/settings.xml', modified_settings_xml)
-    
+
     # Create protection params object
     protection_params = DocxProtectionParams(
         edit_option=edit_option,
@@ -205,7 +213,7 @@ def _apply_docx_protection_internal(
         hash_value=crypto_params.key_hash,
         salt_value=crypto_params.salt_hash
     )
-    
+
     return in_memory_zip, protection_params
 
 
@@ -219,7 +227,7 @@ def apply_docx_protection(
 ) -> Optional[DocxProtectionParams]:
     """
     Apply protection to a DOCX file (modifies file in-place).
-    
+
     Args:
         doc_path: Path to the DOCX file to protect
         password: The password to use for protection
@@ -227,11 +235,11 @@ def apply_docx_protection(
         edit_option: The type of editing allowed (default: "trackedChanges")
         enforce_option: Whether to enforce protection (default: 1)
         return_protection_params: Whether to return protection parameters (default: False)
-    
+
     Returns:
         None if return_protection_params is False
         DocxProtectionParams if return_protection_params is True
-    
+
     Raises:
         FileNotFoundError: If doc_path doesn't exist
     """
@@ -239,17 +247,17 @@ def apply_docx_protection(
     doc_file = Path(doc_path)
     if not doc_file.exists():
         raise FileNotFoundError(f"The specified file does not exist: {doc_path}")
-    
+
     # Open the ZIP file and process it
     with ZipFile(doc_file, 'r') as input_zip:
         in_memory_zip, protection_params = _apply_docx_protection_internal(
             input_zip, password, salt, edit_option, enforce_option
         )
-    
+
     # Write back to original file
     with open(doc_file, 'wb') as f:
         f.write(in_memory_zip.getvalue())
-    
+
     return protection_params if return_protection_params else None
 
 
@@ -263,7 +271,7 @@ def apply_docx_protection_buffer(
 ) -> Union[BytesIO, tuple[BytesIO, DocxProtectionParams]]:
     """
     Apply protection to a DOCX file in a BytesIO buffer (returns new buffer).
-    
+
     Args:
         doc_buffer: BytesIO buffer containing the DOCX file
         password: The password to use for protection
@@ -271,23 +279,120 @@ def apply_docx_protection_buffer(
         edit_option: The type of editing allowed (default: "trackedChanges")
         enforce_option: Whether to enforce protection (default: 1)
         return_protection_params: Whether to return protection parameters (default: False)
-    
+
     Returns:
         BytesIO if return_protection_params is False (new buffer with protected document)
         tuple[BytesIO, DocxProtectionParams] if return_protection_params is True
     """
     # Ensure we're at the beginning of the buffer
     doc_buffer.seek(0)
-    
+
     # Open the ZIP from buffer and process it
     with ZipFile(doc_buffer, 'r') as input_zip:
         in_memory_zip, protection_params = _apply_docx_protection_internal(
             input_zip, password, salt, edit_option, enforce_option
         )
-    
+
     # Return BytesIO buffer positioned at start
     in_memory_zip.seek(0)
-    
+
     if return_protection_params:
         return in_memory_zip, protection_params
+    return in_memory_zip
+
+
+def is_protected(doc_path: str) -> bool:
+    """
+    Return True if the DOCX file at *doc_path* has document protection applied.
+
+    Args:
+        doc_path: Path to the DOCX file to inspect
+
+    Returns:
+        True if document protection is present, False otherwise
+
+    Raises:
+        FileNotFoundError: If doc_path doesn't exist
+    """
+    return get_docx_protection(doc_path) is not None
+
+
+def _remove_docx_protection_internal(input_zip: ZipFile) -> BytesIO:
+    """
+    Internal function that removes document protection from a DOCX ZIP.
+
+    Args:
+        input_zip: An open ZipFile object containing the DOCX contents
+
+    Returns:
+        BytesIO buffer with the unprotected document
+    """
+    if 'word/settings.xml' not in input_zip.namelist():
+        raise ValueError("The DOCX file does not contain word/settings.xml and cannot be modified")
+
+    in_memory_zip = BytesIO()
+    with ZipFile(in_memory_zip, 'w', ZIP_DEFLATED) as temp_docx:
+        for item in input_zip.infolist():
+            if item.filename != 'word/settings.xml':
+                temp_docx.writestr(item, input_zip.read(item.filename))
+            else:
+                settings_xml = input_zip.read('word/settings.xml')
+                parser = etree.XMLParser(remove_blank_text=False)
+                root = etree.fromstring(settings_xml, parser=parser)
+
+                namespace_map = root.nsmap
+
+                # Remove the <w:documentProtection> element if present
+                document_protection = root.find('w:documentProtection', namespaces=namespace_map)
+                if document_protection is not None:
+                    root.remove(document_protection)
+
+                modified_settings_xml = etree.tostring(
+                    root, encoding='utf-8', xml_declaration=False, pretty_print=False)
+                temp_docx.writestr('word/settings.xml', modified_settings_xml)
+
+    return in_memory_zip
+
+
+def remove_docx_protection(doc_path: str) -> None:
+    """
+    Remove document protection from a DOCX file (modifies file in-place).
+
+    If the file does not have protection applied this function is a no-op.
+
+    Args:
+        doc_path: Path to the DOCX file
+
+    Raises:
+        FileNotFoundError: If doc_path doesn't exist
+    """
+    doc_file = Path(doc_path)
+    if not doc_file.exists():
+        raise FileNotFoundError(f"The specified file does not exist: {doc_path}")
+
+    with ZipFile(doc_file, 'r') as input_zip:
+        in_memory_zip = _remove_docx_protection_internal(input_zip)
+
+    with open(doc_file, 'wb') as f:
+        f.write(in_memory_zip.getvalue())
+
+
+def remove_docx_protection_buffer(doc_buffer: BytesIO) -> BytesIO:
+    """
+    Remove document protection from a DOCX file in a BytesIO buffer (returns new buffer).
+
+    If the document does not have protection applied the returned buffer is a clean copy.
+
+    Args:
+        doc_buffer: BytesIO buffer containing the DOCX file
+
+    Returns:
+        BytesIO with the unprotected document, positioned at the start
+    """
+    doc_buffer.seek(0)
+
+    with ZipFile(doc_buffer, 'r') as input_zip:
+        in_memory_zip = _remove_docx_protection_internal(input_zip)
+
+    in_memory_zip.seek(0)
     return in_memory_zip

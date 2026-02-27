@@ -2,7 +2,14 @@ import pytest
 import shutil
 from tempfile import NamedTemporaryFile
 from io import BytesIO
-from docx_locker import apply_docx_protection, apply_docx_protection_buffer, get_docx_protection
+from docx_locker import (
+    apply_docx_protection,
+    apply_docx_protection_buffer,
+    get_docx_protection,
+    is_protected,
+    remove_docx_protection,
+    remove_docx_protection_buffer,
+)
 from zipfile import ZipFile
 from lxml import etree
 
@@ -383,7 +390,7 @@ def test_apply_docx_protection_missing_settings_xml():
     with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
         with ZipFile(temp_file, 'w') as docx:
             docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
-        
+
         # Should raise ValueError when settings.xml is missing
         with pytest.raises(ValueError, match="does not contain word/settings.xml"):
             apply_docx_protection(temp_file.name, "password")
@@ -402,15 +409,15 @@ def test_apply_docx_protection_buffer_basic(unprotected_doc_buffer):
     """Test basic BytesIO protection"""
     password = "test_password"
     output_buffer = apply_docx_protection_buffer(unprotected_doc_buffer, password)
-    
+
     assert isinstance(output_buffer, BytesIO), "Output should be a BytesIO object"
     assert output_buffer.tell() == 0, "Output buffer should be positioned at the start"
-    
+
     # Verify protection was applied by saving and checking
     with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
         temp_file.write(output_buffer.read())
         temp_file.flush()
-        
+
         protection_settings = get_docx_protection(temp_file.name)
         assert protection_settings is not None, "Protection settings should be applied"
         assert protection_settings.edit_option == "trackedChanges", "Edit option should be trackedChanges"
@@ -421,10 +428,10 @@ def test_apply_docx_protection_buffer_with_return_params(unprotected_doc_buffer)
     """Test BytesIO with return_protection_params=True"""
     password = "test_password"
     result = apply_docx_protection_buffer(unprotected_doc_buffer, password, return_protection_params=True)
-    
+
     assert isinstance(result, tuple), "Result should be a tuple when return_protection_params=True"
     assert len(result) == 2, "Result should contain BytesIO and DocxProtectionParams"
-    
+
     output_buffer, params = result
     assert isinstance(output_buffer, BytesIO), "First element should be BytesIO"
     assert params.edit_option == "trackedChanges", "Protection params should have correct edit option"
@@ -441,14 +448,14 @@ def test_apply_docx_protection_buffer_custom_options(unprotected_doc_buffer):
         edit_option="readOnly",
         enforce_option=1
     )
-    
+
     assert isinstance(output_buffer, BytesIO), "Output should be a BytesIO object"
-    
+
     # Verify protection settings
     with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
         temp_file.write(output_buffer.read())
         temp_file.flush()
-        
+
         protection_settings = get_docx_protection(temp_file.name)
         assert protection_settings is not None, "Protection settings should be applied"
         assert protection_settings.edit_option == "readOnly", "Edit option should be readOnly"
@@ -465,7 +472,7 @@ def test_apply_docx_protection_buffer_with_salt(unprotected_doc_buffer):
         salt=custom_salt,
         return_protection_params=True
     )
-    
+
     assert params.salt_value == custom_salt, "Salt should match the provided value"
 
 
@@ -474,17 +481,17 @@ def test_apply_docx_protection_buffer_preserves_input(unprotected_doc_path):
     with open(unprotected_doc_path, 'rb') as f:
         original_data = f.read()
         input_buffer = BytesIO(original_data)
-    
+
     password = "test_password"
     output_buffer = apply_docx_protection_buffer(input_buffer, password)
-    
+
     # The input buffer should still exist and be readable
     input_buffer.seek(0)
     input_data_after = input_buffer.read()
-    
+
     # Input should be unchanged
     assert len(input_data_after) == len(original_data), "Input buffer data should be preserved"
-    
+
     # Output should be different from input (since it's protected)
     output_buffer.seek(0)
     output_data = output_buffer.read()
@@ -495,14 +502,14 @@ def test_apply_docx_protection_buffer_multiple_edits(unprotected_doc_buffer):
     """Test applying protection multiple times to different buffers"""
     password1 = "password1"
     password2 = "password2"
-    
+
     # First protection
     buffer1 = apply_docx_protection_buffer(unprotected_doc_buffer, password1)
-    
+
     # Reset input buffer for second protection
     unprotected_doc_buffer.seek(0)
     buffer2 = apply_docx_protection_buffer(unprotected_doc_buffer, password2)
-    
+
     # Both should be valid but different
     assert buffer1.getvalue() != buffer2.getvalue(), "Different passwords should produce different results"
 
@@ -515,7 +522,7 @@ def test_apply_docx_protection_buffer_empty_password(unprotected_doc_buffer):
         password,
         return_protection_params=True
     )
-    
+
     assert params.hash_value is not None, "Hash value should be set even with empty password"
     assert params.salt_value is not None, "Salt value should be set even with empty password"
 
@@ -524,7 +531,7 @@ def test_apply_docx_protection_vs_buffer_same_result(unprotected_doc_path):
     """Test that file and buffer methods produce equivalent results"""
     password = "test_password"
     custom_salt = "ouz9XiaimAE4pO6OOtk28g=="
-    
+
     # Apply to file
     with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
         shutil.copyfile(unprotected_doc_path, temp_file.name)
@@ -534,7 +541,7 @@ def test_apply_docx_protection_vs_buffer_same_result(unprotected_doc_path):
             salt=custom_salt,
             return_protection_params=True
         )
-    
+
     # Apply to buffer
     with open(unprotected_doc_path, 'rb') as f:
         buffer = BytesIO(f.read())
@@ -544,7 +551,7 @@ def test_apply_docx_protection_vs_buffer_same_result(unprotected_doc_path):
         salt=custom_salt,
         return_protection_params=True
     )
-    
+
     # Both should produce the same protection parameters
     assert file_params.hash_value == buffer_params.hash_value, "Hash values should match"
     assert file_params.salt_value == buffer_params.salt_value, "Salt values should match"
@@ -555,7 +562,7 @@ def test_apply_docx_protection_buffer_all_edit_options(unprotected_doc_buffer):
     """Test all edit option values work with buffer"""
     password = "test_password"
     edit_options = ["forms", "none", "readOnly", "trackedChanges", "comments"]
-    
+
     for edit_option in edit_options:
         unprotected_doc_buffer.seek(0)  # Reset for each iteration
         output_buffer, params = apply_docx_protection_buffer(
@@ -570,7 +577,7 @@ def test_apply_docx_protection_buffer_all_edit_options(unprotected_doc_buffer):
 def test_apply_docx_protection_buffer_invalid_zip():
     """Test buffer with invalid ZIP content"""
     invalid_buffer = BytesIO(b"This is not a valid ZIP file")
-    
+
     with pytest.raises(Exception):  # Will raise BadZipFile or similar
         apply_docx_protection_buffer(invalid_buffer, "password")
 
@@ -581,9 +588,9 @@ def test_apply_docx_protection_buffer_missing_settings_xml():
     buffer = BytesIO()
     with ZipFile(buffer, 'w') as docx:
         docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
-    
+
     buffer.seek(0)
-    
+
     # Should raise ValueError when settings.xml is missing
     with pytest.raises(ValueError, match="does not contain word/settings.xml"):
         apply_docx_protection_buffer(buffer, "password")
@@ -593,13 +600,13 @@ def test_apply_docx_protection_buffer_invalid_settings_xml():
     """Test buffer with invalid settings.xml"""
     buffer = BytesIO()
     invalid_settings_xml = '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:documentProtection></w:settings>'
-    
+
     with ZipFile(buffer, 'w') as docx:
         docx.writestr('word/settings.xml', invalid_settings_xml)
         docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
-    
+
     buffer.seek(0)
-    
+
     # Should raise XML parsing error
     with pytest.raises(etree.XMLSyntaxError):
         apply_docx_protection_buffer(buffer, "password")
@@ -623,9 +630,9 @@ def test_apply_docx_protection_buffer_reprotect():
     with ZipFile(buffer, 'w') as docx:
         docx.writestr('word/settings.xml', settings_xml)
         docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
-    
+
     buffer.seek(0)
-    
+
     # Re-protect with new parameters
     password = "new_password"
     output_buffer, params = apply_docx_protection_buffer(
@@ -634,7 +641,7 @@ def test_apply_docx_protection_buffer_reprotect():
         edit_option="forms",
         return_protection_params=True
     )
-    
+
     assert params.edit_option == "forms", "Edit option should be updated to forms"
     assert params.hash_value != "existingHash==", "Hash should be updated"
     assert params.salt_value != "existingSalt==", "Salt should be updated"
@@ -651,13 +658,13 @@ def test_apply_docx_protection_buffer_missing_trackRevisions():
     with ZipFile(buffer, 'w') as docx:
         docx.writestr('word/settings.xml', settings_xml)
         docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
-    
+
     buffer.seek(0)
-    
+
     # Should add trackRevisions element
     password = "password"
     output_buffer = apply_docx_protection_buffer(buffer, password)
-    
+
     # Verify trackRevisions was added
     output_buffer.seek(0)
     with ZipFile(output_buffer, 'r') as docx:
@@ -681,12 +688,12 @@ def test_apply_docx_protection_buffer_with_mc_ignorable():
     with ZipFile(buffer, 'w') as docx:
         docx.writestr('word/settings.xml', settings_xml)
         docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
-    
+
     buffer.seek(0)
-    
+
     password = "password"
     output_buffer = apply_docx_protection_buffer(buffer, password)
-    
+
     # Verify mc:Ignorable was updated
     output_buffer.seek(0)
     with ZipFile(output_buffer, 'r') as docx:
@@ -708,12 +715,12 @@ def test_apply_docx_protection_buffer_preserves_other_files():
         docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
         docx.writestr('word/theme/theme1.xml', '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"></a:theme>')
         docx.writestr('word/media/image1.png', b'fake image data')
-    
+
     buffer.seek(0)
-    
+
     password = "password"
     output_buffer = apply_docx_protection_buffer(buffer, password)
-    
+
     # Verify that additional files are preserved
     output_buffer.seek(0)
     with ZipFile(output_buffer, 'r') as docx:
@@ -733,9 +740,9 @@ def test_apply_docx_protection_buffer_enforce_option_zero():
         '''
         docx.writestr('word/settings.xml', settings_xml)
         docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
-    
+
     buffer.seek(0)
-    
+
     password = "password"
     output_buffer, params = apply_docx_protection_buffer(
         buffer,
@@ -743,7 +750,7 @@ def test_apply_docx_protection_buffer_enforce_option_zero():
         enforce_option=0,
         return_protection_params=True
     )
-    
+
     assert params.enforce_option == '0', "Enforce option should be 0"
 
 
@@ -753,26 +760,264 @@ def test_apply_docx_protection_file_then_buffer_reprotect(unprotected_doc_path):
     with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
         shutil.copyfile(unprotected_doc_path, temp_file.name)
         apply_docx_protection(temp_file.name, "password1", edit_option="readOnly")
-        
+
         # Load into buffer and re-protect
         with open(temp_file.name, 'rb') as f:
             buffer = BytesIO(f.read())
-        
+
         output_buffer, params = apply_docx_protection_buffer(
             buffer,
             "password2",
             edit_option="trackedChanges",
             return_protection_params=True
         )
-        
+
         # Verify new protection replaced old
         assert params.edit_option == "trackedChanges", "Edit option should be updated"
-        
+
         # Save and verify
         temp_file.seek(0)
         temp_file.write(output_buffer.read())
         temp_file.flush()
-        
+
         protection_settings = get_docx_protection(temp_file.name)
         assert protection_settings.edit_option == "trackedChanges", "Final protection should be trackedChanges"
 
+
+# ---------------------------------------------------------------------------
+# Tests for is_protected
+# ---------------------------------------------------------------------------
+
+def test_is_protected_with_protected_doc(protected_doc_path):
+    assert is_protected(protected_doc_path) is True, "Protected doc should return True"
+
+
+def test_is_protected_with_unprotected_doc():
+    assert is_protected("tests/test_files/unprotected.docx") is False, "Unprotected doc should return False"
+
+
+def test_is_protected_raises_for_missing_file():
+    with pytest.raises(FileNotFoundError):
+        is_protected("tests/test_files/nonexistent.docx")
+
+
+def test_is_protected_after_applying_protection():
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        with ZipFile(temp_file, 'w') as docx:
+            docx.writestr('word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>')
+            docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+
+        assert is_protected(temp_file.name) is False, "Should not be protected before apply"
+        apply_docx_protection(temp_file.name, "password")
+        assert is_protected(temp_file.name) is True, "Should be protected after apply"
+
+
+# ---------------------------------------------------------------------------
+# Tests for remove_docx_protection (file-based)
+# ---------------------------------------------------------------------------
+
+def test_remove_docx_protection_removes_protection(protected_doc_path):
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        shutil.copyfile(protected_doc_path, temp_file.name)
+        assert is_protected(temp_file.name) is True
+
+        remove_docx_protection(temp_file.name)
+
+        assert is_protected(temp_file.name) is False, "Document should be unprotected after removal"
+        assert get_docx_protection(temp_file.name) is None
+
+
+def test_remove_docx_protection_noop_on_unprotected_doc():
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        shutil.copyfile("tests/test_files/unprotected.docx", temp_file.name)
+        # Should not raise and document stays unprotected
+        remove_docx_protection(temp_file.name)
+        assert is_protected(temp_file.name) is False
+
+
+def test_remove_docx_protection_raises_for_missing_file():
+    with pytest.raises(FileNotFoundError):
+        remove_docx_protection("tests/test_files/nonexistent.docx")
+
+
+def test_remove_docx_protection_preserves_other_files(protected_doc_path):
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        with ZipFile(temp_file, 'w') as docx:
+            settings_xml = '''
+            <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                <w:documentProtection w:edit="readOnly" w:enforcement="1"
+                    w:cryptProviderType="rsaAES" w:cryptAlgorithmClass="hash"
+                    w:cryptAlgorithmType="typeAny" w:cryptAlgorithmSid="14"
+                    w:cryptSpinCount="100000"
+                    w:hash="someHash=="
+                    w:salt="someSalt=="/>
+                <w:trackRevisions/>
+            </w:settings>
+            '''
+            docx.writestr('word/settings.xml', settings_xml)
+            docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+            docx.writestr('word/theme/theme1.xml', '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"></a:theme>')
+
+        remove_docx_protection(temp_file.name)
+
+        with ZipFile(temp_file.name, 'r') as docx:
+            assert 'word/theme/theme1.xml' in docx.namelist(), "Other files should be preserved"
+            assert 'word/document.xml' in docx.namelist(), "document.xml should be preserved"
+
+
+def test_remove_docx_protection_missing_settings_xml():
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        with ZipFile(temp_file, 'w') as docx:
+            docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+
+        with pytest.raises(ValueError, match="does not contain word/settings.xml"):
+            remove_docx_protection(temp_file.name)
+
+
+def test_apply_then_remove_docx_protection_roundtrip():
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        with ZipFile(temp_file, 'w') as docx:
+            docx.writestr('word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>')
+            docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+
+        apply_docx_protection(temp_file.name, "secret")
+        assert is_protected(temp_file.name) is True
+
+        remove_docx_protection(temp_file.name)
+        assert is_protected(temp_file.name) is False
+
+
+# ---------------------------------------------------------------------------
+# Tests for remove_docx_protection_buffer
+# ---------------------------------------------------------------------------
+
+def test_remove_docx_protection_buffer_removes_protection(unprotected_doc_path):
+    # First create a protected buffer
+    with open(unprotected_doc_path, 'rb') as f:
+        buf = BytesIO(f.read())
+    protected_buf, _ = apply_docx_protection_buffer(buf, "password", return_protection_params=True)
+
+    result_buf = remove_docx_protection_buffer(protected_buf)
+
+    assert isinstance(result_buf, BytesIO), "Result should be a BytesIO"
+    assert result_buf.tell() == 0, "Result buffer should be positioned at the start"
+
+    # Save and verify protection is gone
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        temp_file.write(result_buf.read())
+        temp_file.flush()
+        assert get_docx_protection(temp_file.name) is None, "Protection should be removed"
+
+
+def test_remove_docx_protection_buffer_noop_on_unprotected():
+    buf = BytesIO()
+    with ZipFile(buf, 'w') as docx:
+        docx.writestr('word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>')
+        docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+    buf.seek(0)
+
+    result_buf = remove_docx_protection_buffer(buf)
+    assert isinstance(result_buf, BytesIO)
+
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        temp_file.write(result_buf.read())
+        temp_file.flush()
+        assert get_docx_protection(temp_file.name) is None
+
+
+def test_remove_docx_protection_buffer_missing_settings_xml():
+    buf = BytesIO()
+    with ZipFile(buf, 'w') as docx:
+        docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+    buf.seek(0)
+
+    with pytest.raises(ValueError, match="does not contain word/settings.xml"):
+        remove_docx_protection_buffer(buf)
+
+
+def test_remove_docx_protection_buffer_preserves_other_files():
+    buf = BytesIO()
+    settings_xml = '''
+    <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:documentProtection w:edit="readOnly" w:enforcement="1"
+            w:cryptProviderType="rsaAES" w:cryptAlgorithmClass="hash"
+            w:cryptAlgorithmType="typeAny" w:cryptAlgorithmSid="14"
+            w:cryptSpinCount="100000"
+            w:hash="someHash=="
+            w:salt="someSalt=="/>
+    </w:settings>
+    '''
+    with ZipFile(buf, 'w') as docx:
+        docx.writestr('word/settings.xml', settings_xml)
+        docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+        docx.writestr('word/media/image1.png', b'fake image data')
+    buf.seek(0)
+
+    result_buf = remove_docx_protection_buffer(buf)
+    result_buf.seek(0)
+
+    with ZipFile(result_buf, 'r') as docx:
+        assert 'word/media/image1.png' in docx.namelist(), "Media file should be preserved"
+        assert 'word/document.xml' in docx.namelist(), "document.xml should be preserved"
+
+
+def test_apply_then_remove_buffer_roundtrip():
+    buf = BytesIO()
+    with ZipFile(buf, 'w') as docx:
+        docx.writestr('word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>')
+        docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+    buf.seek(0)
+
+    protected_buf = apply_docx_protection_buffer(buf, "secret")
+    unprotected_buf = remove_docx_protection_buffer(protected_buf)
+
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        temp_file.write(unprotected_buf.read())
+        temp_file.flush()
+        assert get_docx_protection(temp_file.name) is None, "Protection should be removed after roundtrip"
+
+
+# ---------------------------------------------------------------------------
+# Tests for input validation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("bad_password", [None, 1, 3.14, [], {}])
+def test_apply_docx_protection_rejects_non_string_password(bad_password):
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        with ZipFile(temp_file, 'w') as docx:
+            docx.writestr('word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>')
+            docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+        with pytest.raises(TypeError):
+            apply_docx_protection(temp_file.name, bad_password)
+
+
+@pytest.mark.parametrize("bad_password", [None, 1, 3.14, [], {}])
+def test_apply_docx_protection_buffer_rejects_non_string_password(bad_password):
+    buf = BytesIO()
+    with ZipFile(buf, 'w') as docx:
+        docx.writestr('word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>')
+        docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+    buf.seek(0)
+    with pytest.raises(TypeError):
+        apply_docx_protection_buffer(buf, bad_password)
+
+
+@pytest.mark.parametrize("bad_edit_option", ["invalid", "READONLY", "locked", "", "all"])
+def test_apply_docx_protection_rejects_invalid_edit_option(bad_edit_option):
+    with NamedTemporaryFile(suffix=".docx", delete=True) as temp_file:
+        with ZipFile(temp_file, 'w') as docx:
+            docx.writestr('word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>')
+            docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+        with pytest.raises(ValueError, match="Invalid edit_option"):
+            apply_docx_protection(temp_file.name, "password", edit_option=bad_edit_option)
+
+
+@pytest.mark.parametrize("bad_edit_option", ["invalid", "READONLY", "locked", "", "all"])
+def test_apply_docx_protection_buffer_rejects_invalid_edit_option(bad_edit_option):
+    buf = BytesIO()
+    with ZipFile(buf, 'w') as docx:
+        docx.writestr('word/settings.xml', '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>')
+        docx.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:document>')
+    buf.seek(0)
+    with pytest.raises(ValueError, match="Invalid edit_option"):
+        apply_docx_protection_buffer(buf, "password", edit_option=bad_edit_option)
