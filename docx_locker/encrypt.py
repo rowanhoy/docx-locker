@@ -102,6 +102,12 @@ def create_hash(password: str) -> str:
 
 
 def generate_docx_protection(password: str, provided_salt: str = None, spins: int = None) -> DocxEncrypt:
+    if not isinstance(password, str):
+        raise TypeError(f"password must be a str, not {type(password).__name__}")
+    if provided_salt is not None and not isinstance(provided_salt, str):
+        raise TypeError(f"provided_salt must be a str or None, not {type(provided_salt).__name__}")
+    if spins is not None and not isinstance(spins, int):
+        raise TypeError(f"spins must be an int or None, not {type(spins).__name__}")
     # Use provided salt or generate a new one
     salt = base64.b64decode(provided_salt) if provided_salt else os.urandom(16)
     spin_count = spins if spins else 100000
